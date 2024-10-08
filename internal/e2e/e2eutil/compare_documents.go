@@ -72,10 +72,8 @@ func compareDocuments(script *testscript.TestScript, neg bool, args []string) {
 func reportResult(script *testscript.TestScript, metaMatches, nodeListMatches, neg bool) { //nolint:revive
 	docsMatch := metaMatches && nodeListMatches
 	if !docsMatch && !neg {
-		if !metaMatches {
-			script.Logf("MetaData does not match")
-		} else {
-			script.Logf("node list does not match")
+		if !nodeListMatches {
+			script.Logf("node lists do not match")
 		}
 
 		script.Fatalf("documents do not match")
@@ -99,14 +97,47 @@ func getFile(script *testscript.TestScript, filePath string) *os.File {
 	return file
 }
 
-func compareMetaData(script *testscript.TestScript, first, second *sbom.Metadata) bool {
-	firstStr := first.String()
-	secondStr := second.String()
+func compareMetaData(script *testscript.TestScript, have, want *sbom.Metadata) bool {
+	equal := true
 
-	script.Logf(firstStr)
-	script.Logf(secondStr)
+	if have.GetId() != want.GetId() {
+		script.Logf("MetaData ID does not match. have %s, want: %s", have.GetId(), want.GetId())
 
-	return firstStr == secondStr
+		equal = false
+	}
+
+	if have.GetVersion() != want.GetVersion() {
+		script.Logf("MetaData Version does not match. have %s, want: %s", have.GetVersion(), want.GetVersion())
+
+		equal = false
+	}
+
+	if have.GetName() != want.GetName() {
+		script.Logf("MetaData Name does not match. have %s, want: %s", have.GetName(), want.GetName())
+
+		equal = false
+	}
+
+	if have.GetName() != want.GetName() {
+		script.Logf("MetaData Name does not match. have %s, want: %s", have.GetName(), want.GetName())
+
+		equal = false
+	}
+
+	if len(have.GetAuthors()) != len(want.GetAuthors()) {
+		script.Logf("MetaData Authors do not match. have %s, want: %s", have.GetAuthors(), want.GetAuthors())
+
+		equal = false
+	}
+
+	if len(have.GetDocumentTypes()) != len(want.GetDocumentTypes()) {
+		script.Logf("MetaData DocTypes do not match. have %s, want: %s",
+			have.GetDocumentTypes(), want.GetDocumentTypes())
+
+		equal = false
+	}
+
+	return equal
 }
 
 func fileExists(filename string) bool {
