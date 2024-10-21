@@ -191,16 +191,14 @@ func Equal(nl1, nl2 *sbom.NodeList, script *testscript.TestScript) bool {
 		nlNodes = append(nlNodes, n.GetName())
 	}
 
-	script.Logf("-----")
-
 	for _, n := range nl2.GetNodes() {
 		nl2Nodes = append(nl2Nodes, n.GetName())
 	}
 
-	script.Logf("GetNodes() differ")
-
 	sort.Strings(nlNodes)
 	sort.Strings(nl2Nodes)
 
+	// If no logging output is seen, but equality fails
+	// this means the nodes are not equal
 	return cmp.Equal(nlNodes, nl2Nodes)
 }
