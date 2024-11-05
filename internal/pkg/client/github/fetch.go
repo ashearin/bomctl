@@ -22,6 +22,8 @@ package github
 import (
 	"fmt"
 
+	"github.com/google/go-github/v53/github"
+
 	"github.com/bomctl/bomctl/internal/pkg/netutil"
 	"github.com/bomctl/bomctl/internal/pkg/options"
 )
@@ -42,8 +44,10 @@ func (client *Client) Fetch(fetchURL string, opts *options.FetchOptions) ([]byte
 	}
 
 	repoService := client.ghClient.Repositories
+	getRefOptions := &github.RepositoryContentGetOptions{Ref: url.GitRef}
 
-	file, _, response, err := repoService.GetContents(opts.Context(), client.owner, client.repoName, url.Fragment, nil)
+	file, _, response, err := repoService.GetContents(opts.Context(), client.owner,
+		client.repoName, url.Fragment, getRefOptions)
 	if err != nil {
 		return nil, fmt.Errorf("retrieving file contents %s: %w", response.Body, err)
 	}
