@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path"
 	"time"
 
@@ -64,7 +65,8 @@ func (client *Client) AddFile(pushURL, id string, opts *options.PushOptions) err
 
 	// Add annotation to save file name.
 	annotations := map[string]string{}
-	if url := client.Parse(pushURL); url != nil {
+	url, err := url.Parse(pushURL)
+	if url != nil {
 		annotations[ocispec.AnnotationTitle] = path.Base(url.Path)
 	}
 
@@ -80,36 +82,30 @@ func (client *Client) AddFile(pushURL, id string, opts *options.PushOptions) err
 	return nil
 }
 
-func (client *Client) PreparePush(pushURL string, opts *options.PushOptions) error {
-	url := client.Parse(pushURL)
-	if url == nil {
-		return fmt.Errorf("%w", netutil.ErrParsingURL)
-	}
+func (client *Client) PreparePush(opts *options.PushOptions) error {
+	pw, _ := client.TargetURL.User.Password()
 
-	auth := netutil.NewBasicAuth(url.Username, url.Password)
+	auth := netutil.NewBasicAuth(client.TargetURL.User.Username(), pw)
 
 	if opts.UseNetRC {
-		if err := auth.UseNetRC(url.Hostname); err != nil {
+		if err := auth.UseNetRC(client.TargetURL.Host); err != nil {
 			return fmt.Errorf("setting .netrc auth: %w", err)
 		}
 	}
 
-	return client.createRepository(url, auth, opts.Options)
+	return client.createRepository(auth, opts.Options)
 }
 
-func (client *Client) Push(pushURL string, opts *options.PushOptions) error {
+func (client *Client) Push(opts *options.PushOptions) error {
 	defer func() {
 		clear(client.descriptors)
 		client.repo = nil
 		client.store = nil
 	}()
 
-	tag := ""
-	if url := client.Parse(pushURL); url != nil {
-		tag = url.Tag
-		if tag == "" {
-			tag = "latest"
-		}
+	tag := client.TargetRef
+	if tag == "" {
+		tag = "latest"
 	}
 
 	manifestDesc, manifestBytes, err := client.generateManifest(nil)
@@ -131,7 +127,7 @@ func (client *Client) Push(pushURL string, opts *options.PushOptions) error {
 		return fmt.Errorf("pushing %s with digest %s to remote repository: %w", tag, string(manifestDesc.Digest), err)
 	}
 
-	opts.Logger.Debug("Copied manifest", "url", pushURL)
+	opts.Logger.Debug("Copied manifest", "url", client.TargetURL.String())
 
 	return nil
 }

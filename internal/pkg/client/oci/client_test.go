@@ -26,7 +26,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	neturl "net/url"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -44,13 +44,12 @@ import (
 
 	"github.com/bomctl/bomctl/internal/pkg/client/oci"
 	"github.com/bomctl/bomctl/internal/pkg/db"
-	"github.com/bomctl/bomctl/internal/pkg/netutil"
 	"github.com/bomctl/bomctl/internal/pkg/options"
 	"github.com/bomctl/bomctl/internal/testutil"
 )
 
 const (
-	manifestTag = "v1"
+	manifestTag = "ref=v1"
 	repoName    = "oci-client-test"
 	testSHA     = "sha256:abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF0123456789"
 )
@@ -87,7 +86,6 @@ type (
 )
 
 func (ocs *ociClientSuite) BeforeTest(_suiteName, _testName string) {
-	ocs.Client = &oci.Client{}
 	ocs.ociTestRepository = &ociTestRepository{}
 
 	var err error
@@ -102,17 +100,19 @@ func (ocs *ociClientSuite) BeforeTest(_suiteName, _testName string) {
 
 	ocs.setupOCIRepository()
 
-	serverURL, err := neturl.Parse(ocs.Server.URL)
+	serverURL, err := url.Parse(ocs.Server.URL)
 	ocs.Require().NoError(err)
 
-	url := &netutil.URL{
-		Hostname: serverURL.Hostname(),
-		Port:     serverURL.Port(),
+	testURL := &url.URL{
+		Scheme:   "oci",
+		Host:     serverURL.Host,
 		Path:     repoName,
-		Tag:      manifestTag,
+		RawQuery: manifestTag,
 	}
-
-	ocs.Require().NoError(ocs.Client.CreateRepository(url, nil, ocs.Options))
+	fmt.Println(testURL.String())
+	ocs.Client, err = oci.Init(testURL)
+	ocs.Require().NoError(err)
+	ocs.Require().NoError(ocs.Client.CreateRepository(nil, ocs.Options))
 
 	ocs.ctx = ocs.Context()
 	testdataDir := testutil.GetTestdataDir()
@@ -195,7 +195,7 @@ func (otr *ociTestRepository) blobsUploadsHandler() http.Handler {
 			resp.Header().Set("Range", "0-0")
 			resp.WriteHeader(http.StatusAccepted)
 		case req.Method == http.MethodPut && req.URL.Path == uploadUUID:
-			digestString, err := neturl.QueryUnescape(req.URL.Query().Get("digest"))
+			digestString, err := url.QueryUnescape(req.URL.Query().Get("digest"))
 			if err != nil {
 				http.Error(resp, req.RequestURI, http.StatusBadRequest)
 
@@ -314,112 +314,136 @@ func (otr *ociTestRepository) setupOCIRepository() {
 	ociServeMux.Handle(prefix+"/manifests/", http.StripPrefix(prefix+"/manifests/", otr.manifestsHandler()))
 }
 
-func (ocs *ociClientSuite) TestClient_Parse() {
-	client := &oci.Client{}
-
+func (ocs *ociClientSuite) TestClient_Init() {
 	for _, data := range []struct {
-		expected *netutil.URL
+		expected *oci.Client
 		name     string
 		url      string
 	}{
 		{
 			name: "oci scheme",
-			url:  "oci://registry.acme.com/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Hostname: "registry.acme.com",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "oci://registry.acme.com/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     nil,
+					Host:     "registry.acme.com",
+					Path:     "example/image",
+					RawQuery: "ref=1.2.3",
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "oci-archive scheme",
-			url:  "oci-archive://registry.acme.com/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Hostname: "registry.acme.com",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "oci-archive://registry.acme.com/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "docker scheme",
-			url:  "docker://registry.acme.com/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Hostname: "registry.acme.com",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "docker://registry.acme.com/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "docker-archive scheme",
-			url:  "docker-archive://registry.acme.com/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Hostname: "registry.acme.com",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "docker-archive://registry.acme.com/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "no scheme",
-			url:  "registry.acme.com/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Hostname: "registry.acme.com",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "registry.acme.com/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "oci scheme with username, port, tag",
-			url:  "oci://username@registry.acme.com:12345/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Username: "username",
-				Hostname: "registry.acme.com",
-				Port:     "12345",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "oci://username@registry.acme.com:12345/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "oci scheme with username, password, port, tag",
-			url:  "oci://username:password@registry.acme.com:12345/example/image:1.2.3",
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Username: "username",
-				Password: "password",
-				Hostname: "registry.acme.com",
-				Port:     "12345",
-				Path:     "example/image",
-				Tag:      "1.2.3",
+			url:  "oci://username:password@registry.acme.com:12345/example/image?ref=1.2.3",
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "oci scheme with username, port, digest",
-			url:  "oci://username@registry.acme.com:12345/example/image@" + testSHA,
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Username: "username",
-				Hostname: "registry.acme.com",
-				Port:     "12345",
-				Path:     "example/image",
-				Digest:   testSHA,
+			url:  "oci://username@registry.acme.com:12345/example/image?ref=" + testSHA,
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
 			name: "oci scheme with username, password, port, digest",
-			url:  "oci://username:password@registry.acme.com:12345/example/image@" + testSHA,
-			expected: &netutil.URL{
-				Scheme:   "oci",
-				Username: "username",
-				Password: "password",
-				Hostname: "registry.acme.com",
-				Port:     "12345",
-				Path:     "example/image",
-				Digest:   testSHA,
+			url:  "oci://username:password@registry.acme.com:12345/example/image?ref=" + testSHA,
+			expected: &oci.Client{
+				TargetURL: &url.URL{
+					Scheme:   "oci",
+					User:     url.User("username"),
+					Host:     "registry.acme.com:12345",
+					Path:     "example/image",
+					RawQuery: "ref=" + testSHA,
+				},
+				TargetRef: testSHA,
 			},
 		},
 		{
@@ -434,7 +458,10 @@ func (ocs *ociClientSuite) TestClient_Parse() {
 		},
 	} {
 		ocs.Run(data.name, func() {
-			actual := client.Parse(data.url)
+			testURL, err := url.Parse(data.url)
+			ocs.Require().NoError(err)
+			actual, err := oci.Init(testURL)
+			ocs.Require().NoError(err)
 			ocs.Require().Equal(data.expected, actual, data.url)
 		})
 	}

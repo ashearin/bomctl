@@ -21,6 +21,7 @@ package gitlab
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -72,3 +73,5 @@ func (client *Client) Parse(rawURL string) *netutil.URL {
 		GitRef:   results["gitRef"],
 	}
 }
+
+func Init(targetURL *url.URL) (*Client, error) { return &Client{}, nil }

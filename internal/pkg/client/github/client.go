@@ -21,6 +21,7 @@ package github
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -85,3 +86,5 @@ func (client *Client) Parse(rawURL string) *netutil.URL {
 		Port:     results["port"],
 	}
 }
+
+func Init(targetURL *url.URL) (*Client, error) { return &Client{}, nil }

@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -39,6 +40,8 @@ import (
 var ErrMultipleSBOMs = errors.New("more than one SBOM document identified in OCI image")
 
 type Client struct {
+	TargetURL   *url.URL
+	TargetRef   string
 	ctx         context.Context
 	store       *memory.Store
 	repo        *remote.Repository
@@ -61,58 +64,41 @@ func (*Client) RegExp() *regexp.Regexp {
 	)
 }
 
-func (client *Client) Parse(rawURL string) *netutil.URL {
-	results := map[string]string{}
-	pattern := client.RegExp()
-	match := pattern.FindStringSubmatch(rawURL)
-
-	for idx, name := range match {
-		results[pattern.SubexpNames()[idx]] = name
-	}
-
-	if results["scheme"] == "docker" || results["scheme"] == "" {
-		results["scheme"] = "oci"
+func Init(targetURL *url.URL) (*Client, error) {
+	if targetURL.Scheme == "" {
+		targetURL.Scheme = "oci"
 	}
 
 	// Ensure required map fields are present.
-	for _, required := range []string{"scheme", "hostname", "path"} {
-		if value, ok := results[required]; !ok || value == "" {
-			return nil
-		}
+	if targetURL.Host == "" || targetURL.Path == "" {
+		return nil, errors.ErrUnsupported
 	}
 
-	// One and only one of `tag` or `digest` must be present.
-	tag, ok := results["tag"]
-	hasTag := ok && tag != ""
+	client := Client{}
+	client.TargetURL = targetURL
 
-	digest, ok := results["digest"]
-	hasDigest := ok && digest != ""
+	queries := targetURL.Query()
 
-	// If both `tag` and `digest` are present, or neither are.
-	if hasTag == hasDigest {
-		return nil
+	// Verify ref is present in query
+	ref := queries.Get("ref")
+	fmt.Println("ref: " + ref)
+	if targetURL.RawQuery == "" {
+		return nil, errors.ErrUnsupported
 	}
 
-	return &netutil.URL{
-		Scheme:   results["scheme"],
-		Username: results["username"],
-		Password: results["password"],
-		Hostname: results["hostname"],
-		Port:     results["port"],
-		Path:     results["path"],
-		Tag:      results["tag"],
-		Digest:   results["digest"],
-	}
+	client.TargetRef = ref
+
+	return &client, nil
 }
 
-func (client *Client) createRepository(url *netutil.URL, auth *netutil.BasicAuth, opts *options.Options) (err error) {
+func (client *Client) createRepository(auth *netutil.BasicAuth, opts *options.Options) (err error) {
 	client.ctx = opts.Context()
 	client.store = memory.New()
 
-	repoPath := (&netutil.URL{
-		Hostname: url.Hostname,
-		Port:     url.Port,
-		Path:     url.Path,
+	repoPath := (&url.URL{
+		Scheme: client.TargetURL.Scheme,
+		Host:   client.TargetURL.Host,
+		Path:   client.TargetURL.EscapedPath(),
 	}).String()
 
 	if client.repo != nil && client.repo.Reference.String() == repoPath {
@@ -127,7 +113,7 @@ func (client *Client) createRepository(url *netutil.URL, auth *netutil.BasicAuth
 		client.repo.Client = &orasauth.Client{
 			Client: retry.DefaultClient,
 			Cache:  orasauth.DefaultCache,
-			Credential: orasauth.StaticCredential(url.Hostname, orasauth.Credential{
+			Credential: orasauth.StaticCredential(client.TargetURL.Host, orasauth.Credential{
 				Username: auth.Username,
 				Password: auth.Password,
 			}),

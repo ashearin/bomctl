@@ -21,6 +21,7 @@ package oci_test
 
 import (
 	"fmt"
+	"net/url"
 	neturl "net/url"
 
 	"github.com/opencontainers/go-digest"
@@ -78,11 +79,13 @@ func (ocs *ociClientSuite) TestClient_Fetch() {
 		},
 	} {
 		ocs.Run(data.name, func() {
-			fetchURL := fmt.Sprintf("%s/%s:%s", serverURL.Host, repoName, data.tag)
+			tempURL, err := url.Parse(fmt.Sprintf("%s/%s?ref=%s", serverURL.Host, repoName, data.tag))
+			ocs.Require().NoError(err)
+			ocs.Client.TargetURL = tempURL
 
 			ocs.Require().NoError(ocs.packManifest(data.tag, data.descriptors...))
 
-			if _, err := ocs.Fetch(fetchURL, opts); data.expectedErr != nil {
+			if _, err := ocs.Fetch(opts); data.expectedErr != nil {
 				ocs.Require().ErrorContains(err, data.expectedErr.Error())
 			} else {
 				ocs.Require().NoError(err)

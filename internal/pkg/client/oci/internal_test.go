@@ -32,8 +32,8 @@ import (
 
 var GetDocument = getDocument
 
-func (client *Client) CreateRepository(url *netutil.URL, auth *netutil.BasicAuth, opts *options.Options) error {
-	return client.createRepository(url, auth, opts)
+func (client *Client) CreateRepository(auth *netutil.BasicAuth, opts *options.Options) error {
+	return client.createRepository(auth, opts)
 }
 
 func (client *Client) Descriptors() []ocispec.Descriptor {

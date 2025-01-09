@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,14 +32,9 @@ import (
 	"github.com/protobom/protobom/pkg/sbom"
 
 	"github.com/bomctl/bomctl/internal/pkg/client"
-	"github.com/bomctl/bomctl/internal/pkg/client/git"
-	"github.com/bomctl/bomctl/internal/pkg/client/github"
-	"github.com/bomctl/bomctl/internal/pkg/client/http"
-	"github.com/bomctl/bomctl/internal/pkg/client/oci"
 	"github.com/bomctl/bomctl/internal/pkg/db"
 	"github.com/bomctl/bomctl/internal/pkg/netutil"
 	"github.com/bomctl/bomctl/internal/pkg/options"
-	"github.com/bomctl/bomctl/internal/pkg/sliceutil"
 )
 
 func Fetch(sbomURL string, opts *options.FetchOptions) (*sbom.Document, error) { //nolint:cyclop
@@ -54,16 +50,17 @@ func Fetch(sbomURL string, opts *options.FetchOptions) (*sbom.Document, error) {
 
 	opts.Logger.Info(fmt.Sprintf("Fetching from %s URL", fetcher.Name()), "url", sbomURL)
 
-	url := fetcher.Parse(sbomURL)
-	auth := netutil.NewBasicAuth(url.Username, url.Password)
+	u, err := url.Parse(sbomURL)
+	pw, _ := u.User.Password()
+	auth := netutil.NewBasicAuth(u.User.Username(), pw)
 
 	if opts.UseNetRC {
-		if err := auth.UseNetRC(url.Hostname); err != nil {
+		if err := auth.UseNetRC(u.Host); err != nil {
 			return nil, fmt.Errorf("failed to set auth: %w", err)
 		}
 	}
 
-	if err := fetcher.PrepareFetch(url, auth, opts.Options); err != nil {
+	if err := fetcher.PrepareFetch(u, auth, opts.Options); err != nil {
 		return nil, fmt.Errorf("preparing fetch: %w", err)
 	}
 
@@ -97,10 +94,13 @@ func Fetch(sbomURL string, opts *options.FetchOptions) (*sbom.Document, error) {
 }
 
 func NewFetcher(url string) (client.Fetcher, error) {
-	clients := []client.Fetcher{&github.Client{}, &git.Client{}, &http.Client{}, &oci.Client{}}
-
-	fetcher, err := sliceutil.Next(clients, func(f client.Fetcher) bool { return f.Parse(url) != nil })
+	c, err := client.New(url)
 	if err != nil {
+		return nil, fmt.Errorf("%w: %s", client.ErrUnsupportedURL, url)
+	}
+
+	fetcher, ok := c.(client.Fetcher)
+	if !ok {
 		return nil, fmt.Errorf("%w: %s", client.ErrUnsupportedURL, url)
 	}
 

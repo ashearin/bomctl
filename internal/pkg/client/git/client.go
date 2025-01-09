@@ -21,6 +21,7 @@ package git
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 
 	"github.com/go-git/go-billy/v5/memfs"
@@ -116,3 +117,5 @@ func (client *Client) cloneRepo(url *netutil.URL, auth *netutil.BasicAuth, opts 
 
 	return nil
 }
+
+func Init(targetURL *url.URL) (*Client, error) { return &Client{}, nil }

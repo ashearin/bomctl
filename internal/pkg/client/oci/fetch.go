@@ -32,17 +32,12 @@ import (
 	"github.com/bomctl/bomctl/internal/pkg/options"
 )
 
-func (client *Client) PrepareFetch(url *netutil.URL, auth *netutil.BasicAuth, opts *options.Options) error {
-	return client.createRepository(url, auth, opts)
+func (client *Client) PrepareFetch(auth *netutil.BasicAuth, opts *options.Options) error {
+	return client.createRepository(auth, opts)
 }
 
-func (client *Client) Fetch(fetchURL string, opts *options.FetchOptions) ([]byte, error) {
-	url := client.Parse(fetchURL)
-
-	ref := url.Tag
-	if ref == "" {
-		ref = url.Digest
-	}
+func (client *Client) Fetch(opts *options.FetchOptions) ([]byte, error) {
+	ref := client.TargetRef
 
 	copyOpts := oras.CopyOptions{CopyGraphOptions: oras.CopyGraphOptions{FindSuccessors: nil}}
 

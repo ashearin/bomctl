@@ -22,6 +22,7 @@ package http
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 
 	"github.com/bomctl/bomctl/internal/pkg/netutil"
@@ -73,3 +74,5 @@ func (client *Client) Parse(rawURL string) *netutil.URL {
 		Fragment: results["fragment"],
 	}
 }
+
+func Init(targetURL *url.URL) (*Client, error) { return &Client{}, nil }

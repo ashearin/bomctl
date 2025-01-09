@@ -21,8 +21,6 @@ package oci_test
 
 import (
 	"bytes"
-	"fmt"
-	neturl "net/url"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/protobom/protobom/pkg/formats"
@@ -32,12 +30,8 @@ import (
 )
 
 func (ocs *ociClientSuite) TestClient_AddFile() {
-	serverURL, err := neturl.Parse(ocs.Server.URL)
-	ocs.Require().NoError(err)
-
 	ocs.Require().NoError(
 		ocs.Client.PreparePush(
-			fmt.Sprintf("%s/%s:%s", serverURL.Host, repoName, manifestTag),
 			&options.PushOptions{Options: ocs.Options},
 		),
 	)
@@ -47,7 +41,7 @@ func (ocs *ociClientSuite) TestClient_AddFile() {
 	// Test adding all SBOM files to artifact archive.
 	for _, document := range ocs.documents {
 		ocs.Require().NoError(ocs.Client.AddFile(
-			fmt.Sprintf("%s/%s:%s", serverURL.Host, repoName, manifestTag),
+			ocs.Client.TargetURL.String(),
 			document.GetMetadata().GetId(),
 			&options.PushOptions{Options: ocs.Options, Format: formats.SPDX23JSON},
 		))
@@ -63,11 +57,8 @@ func (ocs *ociClientSuite) TestClient_AddFile() {
 }
 
 func (ocs *ociClientSuite) TestClient_Push() {
-	serverURL, err := neturl.Parse(ocs.Server.URL)
-	ocs.Require().NoError(err)
-
 	ocs.Repo().Client = &orasauth.Client{Client: ocs.Server.Client()}
-	pushURL := fmt.Sprintf("%s/%s:%s", serverURL.Host, repoName, manifestTag+"-single")
+
 	annotations := map[string]string{ocispec.AnnotationCreated: created}
 
 	for idx := range ocs.sbomBlobs {
@@ -75,10 +66,10 @@ func (ocs *ociClientSuite) TestClient_Push() {
 		ocs.Require().NoError(err)
 	}
 
-	_, _, err = ocs.Client.GenerateManifest(annotations)
+	_, _, err := ocs.Client.GenerateManifest(annotations)
 	ocs.Require().NoError(err)
 
-	ocs.Require().NoError(ocs.Client.Push(pushURL, &options.PushOptions{
+	ocs.Require().NoError(ocs.Client.Push(&options.PushOptions{
 		Options: ocs.Options,
 		Format:  formats.SPDX23JSON,
 		UseTree: false,
