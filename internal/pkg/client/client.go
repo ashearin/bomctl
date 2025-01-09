@@ -71,9 +71,9 @@ type (
 func NewFetcher(fetchURL string) (Fetcher, error) {
 	var fetch Fetcher
 	c, err := New(fetchURL)
-	fetch = c.(Fetcher)
+	fetch, ok := c.(Fetcher)
 
-	if err != nil {
+	if err != nil || !ok {
 		return nil, fmt.Errorf("Invalid URL: %s", fetchURL)
 	}
 
@@ -92,7 +92,7 @@ func New(sbomURL string) (Client, error) {
 func DetermineClient(parsedURL *url.URL) (Client, error) {
 	fmt.Printf("%#v\n", parsedURL)
 
-	if client := checkScheme(parsedURL); client != nil {
+	if client, err := checkScheme(parsedURL); err == nil {
 		return client, nil
 	}
 
@@ -100,42 +100,35 @@ func DetermineClient(parsedURL *url.URL) (Client, error) {
 		parsedURL.Scheme = "https"
 	}
 
-	if strings.Contains(parsedURL.Path, ".git") || parsedURL.Fragment != "" {
+	switch {
+	case strings.Contains(parsedURL.Path, ".git") || parsedURL.Fragment != "":
 		return &git.Client{}, nil
-	}
-
-	if strings.Contains(parsedURL.Host, "github") {
+	case strings.Contains(parsedURL.Host, "github"):
 		return &github.Client{}, nil
-	}
-
-	if strings.Contains(parsedURL.Host, "gitlab") {
+	case strings.Contains(parsedURL.Host, "gitlab"):
 		return &gitlab.Client{}, nil
-	}
-
-	if sliceutil.Any(registrySlice(), func(s string) bool { return strings.Contains(parsedURL.Host, s) }) {
+	case sliceutil.Any(registrySlice(), func(s string) bool { return strings.Contains(parsedURL.Host, s) }):
 		return oci.Init(parsedURL)
-	}
-
-	if parsedURL.Scheme == "https" || parsedURL.Scheme == "http" {
+	case parsedURL.Scheme == "https" || parsedURL.Scheme == "http":
 		return &http.Client{}, nil
+	default:
+		return nil, fmt.Errorf("%w", ErrUnsupportedURL)
 	}
-
-	return nil, fmt.Errorf("%w", ErrUnsupportedURL)
 }
 
-func checkScheme(parsedURL *url.URL) Client {
+func checkScheme(parsedURL *url.URL) (Client, error) {
 	// check for explicit selection via scheme
 	switch parsedURL.Scheme {
 	case "git":
-		return &git.Client{}
+		return &git.Client{}, nil
 	case "github":
-		return &github.Client{}
+		return &github.Client{}, nil
 	case "gitlab":
-		return &gitlab.Client{}
+		return &gitlab.Client{}, nil
 	case "oci", "oci-archive", "docker", "docker-archive":
-		return &oci.Client{}
+		return oci.Init(parsedURL)
 	default:
-		return nil
+		return nil, fmt.Errorf("%w", ErrUnsupportedURL)
 	}
 }
 

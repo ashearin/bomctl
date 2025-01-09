@@ -35,6 +35,7 @@ import (
 	"github.com/bomctl/bomctl/internal/pkg/db"
 	"github.com/bomctl/bomctl/internal/pkg/netutil"
 	"github.com/bomctl/bomctl/internal/pkg/options"
+	"github.com/bomctl/bomctl/internal/pkg/sliceutil"
 )
 
 func Fetch(sbomURL string, opts *options.FetchOptions) (*sbom.Document, error) { //nolint:cyclop
